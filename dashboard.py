@@ -46,7 +46,7 @@ members_insights = load("members_insights")
 products = load("product_data")
 
 # -------------------------
-# 🔹 BASIS CONVERSIES (LICHT)
+# 🔹 BASIS
 # -------------------------
 if 'date' in social.columns:
     social['date'] = pd.to_datetime(social['date'], errors='coerce')
@@ -55,26 +55,8 @@ for col in ['views','likes','comments','shares','followers']:
     if col in social.columns:
         social[col] = pd.to_numeric(social[col], errors='coerce')
 
-if 'created_at' in members.columns:
-    members['created_at'] = pd.to_datetime(members['created_at'], errors='coerce')
-
-if 'last_purchase_date' in members_insights.columns:
-    members_insights['last_purchase_date'] = pd.to_datetime(
-        members_insights['last_purchase_date'], errors='coerce'
-    )
-
-if 'total_spent' in members_insights.columns:
-    members_insights['total_spent'] = pd.to_numeric(
-        members_insights['total_spent'], errors='coerce'
-    )
-
 # -------------------------
-# 🔹 MERGE MEMBERS
-# -------------------------
-members_full = members.merge(members_insights, on='member_id', how='left')
-
-# -------------------------
-# 🔹 INSTAGRAM VOLGERS
+# 🔥 INSTAGRAM VOLGERS
 # -------------------------
 latest = 0
 growth = 0
@@ -106,52 +88,70 @@ col1, col2, col3, col4 = st.columns(4)
 reach = int(social['views'].sum()) if 'views' in social.columns else 0
 members_count = len(members)
 
-open_rate = 0
-if 'opens' in newsletter.columns and 'sent' in newsletter.columns:
-    if newsletter['sent'].sum() > 0:
-        open_rate = (newsletter['opens'].sum() / newsletter['sent'].sum()) * 100
-
 col1.markdown(f"<div class='kpi'><h3>Bereik</h3><h2>{reach:,}</h2></div>", unsafe_allow_html=True)
-col2.markdown(f"<div class='kpi'><h3>Open rate</h3><h2>{open_rate:.1f}%</h2></div>", unsafe_allow_html=True)
-col3.markdown(f"<div class='kpi'><h3>Nieuwe members</h3><h2>{members_count}</h2></div>", unsafe_allow_html=True)
-col4.markdown(f"<div class='kpi'><h3>Instagram</h3><h2>{latest}</h2><p>+{growth}</p></div>", unsafe_allow_html=True)
+col2.markdown(f"<div class='kpi'><h3>Nieuwe members</h3><h2>{members_count}</h2></div>", unsafe_allow_html=True)
+col3.markdown(f"<div class='kpi'><h3>Instagram</h3><h2>{latest}</h2><p>+{growth}</p></div>", unsafe_allow_html=True)
 
 # -------------------------
-# 🔥 MEMBERS GROEI (MET JOUW WEEK FORMAT)
+# 🔥 MEMBERS GROEI (STERK)
 # -------------------------
 st.subheader("👥 Members groei")
 
 if not members.empty and 'created_at' in members.columns:
 
-    weekly = members.groupby(
-        members['created_at'].dt.to_period('W')
-    ).size().reset_index(name='new_members')
+    df = members.copy()
 
-    # 🔥 JOUW FORMAT: 2026 - week 1
-    weekly['year'] = weekly['created_at'].dt.start_time.dt.isocalendar().year
-    weekly['weeknr'] = weekly['created_at'].dt.start_time.dt.isocalendar().week
+    # week parsing
+    df[['year', 'week']] = df['created_at'].str.extract(r'(\d{4}).*?(\d+)')
 
-    weekly['label'] = weekly['year'].astype(str) + " - week " + weekly['weeknr'].astype(str)
+    df['year'] = pd.to_numeric(df['year'], errors='coerce')
+    df['week'] = pd.to_numeric(df['week'], errors='coerce')
 
-    fig = px.line(weekly, x='label', y='new_members')
+    df = df.dropna(subset=['year','week'])
+
+    # sort datum
+    df['sort'] = pd.to_datetime(
+        df['year'].astype(str) + df['week'].astype(str) + '1',
+        format='%G%V%u',
+        errors='coerce'
+    )
+
+    weekly = df.groupby(['year','week']).size().reset_index(name='new_members')
+
+    weekly['label'] = weekly['year'].astype(int).astype(str) + " - week " + weekly['week'].astype(int).astype(str)
+
+    weekly['sort'] = pd.to_datetime(
+        weekly['year'].astype(str) + weekly['week'].astype(str) + '1',
+        format='%G%V%u',
+        errors='coerce'
+    )
+
+    weekly = weekly.sort_values('sort')
+
+    # 🔹 KPI boven grafiek
+    if len(weekly) > 1:
+        last = weekly.iloc[-1]['new_members']
+        prev = weekly.iloc[-2]['new_members']
+        delta = last - prev
+
+        colA, colB = st.columns(2)
+        colA.metric("Nieuwe members deze week", int(last), delta=int(delta))
+        colB.metric("Totale members", int(weekly['new_members'].sum()))
+
+    # 🔹 grafiek
+    fig = px.line(weekly, x='label', y='new_members', markers=True)
+    fig.update_layout(plot_bgcolor='white')
     st.plotly_chart(fig, use_container_width=True)
 
-# -------------------------
-# 🔹 MEMBERS INSIGHTS
-# -------------------------
-st.subheader("👥 Members waarde & gedrag")
+    # 🔹 cumulatief
+    weekly['cumulative'] = weekly['new_members'].cumsum()
 
-if not members_full.empty:
+    fig2 = px.line(weekly, x='label', y='cumulative', title="Totale groei", markers=True)
+    fig2.update_layout(plot_bgcolor='white')
+    st.plotly_chart(fig2, use_container_width=True)
 
-    if 'total_spent' in members_full.columns:
-        st.metric("Gemiddelde besteding", f"€ {members_full['total_spent'].mean():.2f}")
-
-    if 'last_purchase_date' in members_full.columns:
-        recent = members_full[
-            members_full['last_purchase_date'] >= (pd.Timestamp.today() - pd.Timedelta(days=90))
-        ]
-        pct = (len(recent) / len(members_full)) * 100
-        st.metric("Actieve members", f"{pct:.1f}%")
+else:
+    st.warning("Geen members data")
 
 # -------------------------
 # 🔹 SOCIAL
@@ -168,20 +168,6 @@ if not social.empty and 'views' in social.columns:
 if not followers_data.empty:
     fig = px.line(followers_data, x='date', y='followers')
     st.plotly_chart(fig, use_container_width=True)
-
-# -------------------------
-# 🔹 SOCIAL OVERZICHT
-# -------------------------
-st.subheader("📱 Social posts")
-
-df = social.copy()
-
-if all(col in df.columns for col in ['likes','comments','shares']):
-    df['engagement'] = df['likes'] + df['comments'] + df['shares']
-else:
-    df['engagement'] = 0
-
-st.dataframe(df.head(10))
 
 # -------------------------
 # 🔹 PRODUCTEN
