@@ -27,15 +27,22 @@ h1, h2, h3 {color:#084422;}
 st.title("📊 Van Duinkerken – Marketing Dashboard")
 
 # -------------------------
-# 🔹 SHEET ID (JOUW SHEET)
+# 🔹 SHEET ID
 # -------------------------
 SHEET_ID = "188PcnFIPrcazZ5o2JmoBJ52RuUo-acqkhIWRQyntuI0"
 
+# -------------------------
+# 🔹 BETERE LOAD FUNCTIE (GEEN OPEN SHEET MEER)
+# -------------------------
 def load(sheet):
+    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet}"
+    
     try:
-        return pd.read_csv(f"https://opensheet.elk.sh/{SHEET_ID}/{sheet}")
-    except:
-        st.error(f"Fout bij laden van tab: {sheet}")
+        df = pd.read_csv(url)
+        st.success(f"{sheet} geladen ({len(df)} rijen)")
+        return df
+    except Exception as e:
+        st.error(f"Fout bij laden van {sheet}: {e}")
         return pd.DataFrame()
 
 # -------------------------
@@ -47,7 +54,7 @@ members = load("members")
 products = load("product_data")
 
 # -------------------------
-# 🔹 DATA PREP (veilig)
+# 🔹 DATA PREP
 # -------------------------
 def safe_date(df, col):
     if col in df.columns:
@@ -64,26 +71,29 @@ products = safe_date(products, 'date_online')
 # -------------------------
 col1, col2, col3, col4 = st.columns(4)
 
-# Social KPI
+# Social
 total_reach = social['views'].sum() if 'views' in social.columns else 0
 
-# Nieuwsbrief KPI
+# Nieuwsbrief
 if 'opens' in newsletter.columns and 'sent' in newsletter.columns and newsletter['sent'].sum() > 0:
     open_rate = (newsletter['opens'].sum() / newsletter['sent'].sum()) * 100
 else:
     open_rate = 0
 
-# Members KPI
+# Members
 new_members = len(members)
 
 # -------------------------
-# 🔹 PRODUCT BEREKENING (BELANGRIJKSTE)
+# 🔹 PRODUCT DATA (BELANGRIJK)
 # -------------------------
 if not products.empty and 'brand' in products.columns:
 
+    totaal_col = 'totaal_producten' if 'totaal_producten' in products.columns else None
+    online_col = 'online' if 'online' in products.columns else None
+
     grouped = products.groupby('brand').agg(
-        totaal=('totaal_producten', 'max') if 'totaal_producten' in products.columns else ('brand', 'count'),
-        online=('online', 'sum') if 'online' in products.columns else ('brand', 'count')
+        totaal=(totaal_col, 'max') if totaal_col else ('brand', 'count'),
+        online=(online_col, 'sum') if online_col else ('brand', 'count')
     ).reset_index()
 
     grouped['nog_te_doen'] = grouped['totaal'] - grouped['online']
@@ -110,21 +120,28 @@ if not social.empty and 'date' in social.columns and 'views' in social.columns:
     fig1 = px.line(social, x='date', y='views', color='platform' if 'platform' in social.columns else None)
     st.plotly_chart(fig1, use_container_width=True)
 else:
-    st.info("Geen social data beschikbaar")
+    st.warning("Social data ontbreekt of kolommen kloppen niet")
 
 # -------------------------
 # 🔹 NIEUWSBRIEF
 # -------------------------
 st.subheader("📩 Nieuwsbrief")
 
-if not newsletter.empty and 'campaign' in newsletter.columns:
+if not newsletter.empty:
+
     if 'opens' in newsletter.columns and 'sent' in newsletter.columns:
         newsletter['open_rate'] = (newsletter['opens'] / newsletter['sent']) * 100
 
-    fig2 = px.bar(newsletter, x='campaign', y='open_rate' if 'open_rate' in newsletter.columns else 'opens')
-    st.plotly_chart(fig2, use_container_width=True)
+    y_col = 'open_rate' if 'open_rate' in newsletter.columns else 'opens'
+
+    if 'campaign' in newsletter.columns:
+        fig2 = px.bar(newsletter, x='campaign', y=y_col)
+        st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.warning("Kolom 'campaign' ontbreekt")
+
 else:
-    st.info("Geen nieuwsbrief data beschikbaar")
+    st.warning("Nieuwsbrief data ontbreekt")
 
 # -------------------------
 # 🔹 MEMBERS
@@ -136,10 +153,10 @@ if not members.empty and 'created_at' in members.columns:
     fig3 = px.line(x=members_per_day.index, y=members_per_day.values)
     st.plotly_chart(fig3, use_container_width=True)
 else:
-    st.info("Geen members data beschikbaar")
+    st.warning("Members data ontbreekt")
 
 # -------------------------
-# 🔹 PRODUCT DATA
+# 🔹 PRODUCT VOORTGANG
 # -------------------------
 st.subheader("📦 Product voortgang per merk")
 
@@ -147,19 +164,13 @@ if not grouped.empty:
 
     grouped = grouped.sort_values("nog_te_doen", ascending=False)
 
-    fig4 = px.bar(
-        grouped,
-        x='brand',
-        y='nog_te_doen',
-        title="Nog online te zetten producten per merk"
-    )
-
+    fig4 = px.bar(grouped, x='brand', y='nog_te_doen')
     st.plotly_chart(fig4, use_container_width=True)
 
-    st.dataframe(grouped[['brand', 'totaal', 'online', 'nog_te_doen', 'percentage']])
+    st.dataframe(grouped)
 
 else:
-    st.info("Geen product data beschikbaar")
+    st.warning("Product data ontbreekt")
 
 # -------------------------
 # 🔹 VOORSPELLING
@@ -175,7 +186,7 @@ if per_week > 0:
 # -------------------------
 # 🔹 INSIGHTS
 # -------------------------
-st.subheader("🧠 Belangrijkste inzichten")
+st.subheader("🧠 Insights")
 
 if open_rate > 35:
     st.success("Nieuwsbrief presteert sterk")
@@ -184,7 +195,7 @@ else:
 
 if not social.empty and 'views' in social.columns:
     top_post = social.sort_values("views", ascending=False).iloc[0]
-    st.write(f"Beste social post: {top_post.get('platform', '')} met {top_post['views']} views")
+    st.write(f"Beste social post: {top_post.get('platform','')} met {top_post['views']} views")
 
 if not grouped.empty:
     top_backlog = grouped.iloc[0]
