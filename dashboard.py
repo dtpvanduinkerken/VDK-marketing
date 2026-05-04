@@ -5,7 +5,7 @@ import plotly.express as px
 st.set_page_config(layout="wide")
 
 # -------------------------
-# 🔹 STYLING (VDK)
+# 🔹 STYLING
 # -------------------------
 st.markdown("""
 <style>
@@ -79,51 +79,34 @@ if 'sent' in newsletter.columns and newsletter['sent'].sum() > 0:
     click_rate = (newsletter['clicks'].sum() / newsletter['sent'].sum()) * 100
 
 # -------------------------
-# 👥 MEMBERS GROEI (FIX)
+# 🔹 MEMBERS GROEI (FIX)
 # -------------------------
-st.subheader("👥 Members groei")
+members_growth = pd.DataFrame()
 
 if not members.empty and 'created_at' in members.columns:
 
     df = members.copy()
 
-    # 🔹 haal jaar + week uit tekst zoals "2026 - week 1"
     df[['year','week']] = df['created_at'].astype(str).str.extract(r'(\d{4}).*?(\d+)')
 
     df['year'] = pd.to_numeric(df['year'], errors='coerce')
     df['week'] = pd.to_numeric(df['week'], errors='coerce')
 
-    # 🔹 NIET alles droppen → alleen waar echt leeg
     df = df.dropna(subset=['year','week'])
 
-    # 🔹 groepeer
-    weekly = df.groupby(['year','week']).size().reset_index(name='new_members')
+    members_growth = df.groupby(['year','week']).size().reset_index(name='new_members')
 
-    # 🔹 label zoals jij wil
-    weekly['label'] = weekly['year'].astype(int).astype(str) + " - week " + weekly['week'].astype(int).astype(str)
+    members_growth['label'] = members_growth['year'].astype(int).astype(str) + " - week " + members_growth['week'].astype(int).astype(str)
 
-    # 🔹 echte sortering (belangrijk!)
-    weekly['sort'] = pd.to_datetime(
-        weekly['year'].astype(str) + weekly['week'].astype(str) + '1',
+    members_growth['sort'] = pd.to_datetime(
+        members_growth['year'].astype(str) + members_growth['week'].astype(str) + '1',
         format='%G%V%u',
         errors='coerce'
     )
 
-    weekly = weekly.sort_values('sort')
+    members_growth = members_growth.sort_values('sort')
 
-    # 🔹 grafiek
-    fig = px.line(
-        weekly,
-        x='label',
-        y='new_members',
-        markers=True,
-        title="Nieuwe members per week"
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-else:
-    st.warning("Geen members data gevonden")
+last_members = members_growth.iloc[-1]['new_members'] if len(members_growth)>0 else 0
 
 # -------------------------
 # 🔹 INSTAGRAM
@@ -157,13 +140,23 @@ col3.markdown(f"<div class='kpi'><h3>Open rate</h3><h2>{open_rate:.1f}%</h2></di
 col4.markdown(f"<div class='kpi'><h3>Instagram</h3><h2>{latest}</h2><p>+{growth}</p></div>", unsafe_allow_html=True)
 
 # -------------------------
-# 👥 MEMBERS
+# 👥 MEMBERS GRAFIEK
 # -------------------------
 st.subheader("👥 Members groei")
 
 if not members_growth.empty:
-    fig = px.line(members_growth, x='label', y='new_members')
+
+    fig = px.line(
+        members_growth,
+        x='label',
+        y='new_members',
+        markers=True,
+        title="Nieuwe members per week"
+    )
     st.plotly_chart(fig, use_container_width=True)
+
+else:
+    st.warning("Geen members data")
 
 # -------------------------
 # 📧 NIEUWSBRIEF
@@ -178,7 +171,7 @@ if not newsletter.empty:
     col2.metric("Opens", int(newsletter['opens'].sum()))
     col3.metric("Clicks", int(newsletter['clicks'].sum()))
 
-    fig = px.line(newsletter, y='sent')
+    fig = px.line(newsletter, y='sent', title="Nieuwsbrief volume")
     st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("### 🔥 Beste mailing")
@@ -210,7 +203,7 @@ if 'type' in df.columns:
         df = df[df['type'] == t]
 
 # -------------------------
-# 🔥 VISUELE SOCIAL CARDS
+# 🔥 VISUELE CARDS
 # -------------------------
 st.markdown("### 🔥 Beste posts visueel")
 
