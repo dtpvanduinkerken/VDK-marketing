@@ -27,13 +27,6 @@ body {background-color:#f9f3e9;}
 h1,h2,h3{
     color:#084422;
 }
-
-.stMetric{
-    background:white;
-    padding:20px;
-    border-radius:20px;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -60,27 +53,28 @@ products = load("product_data")
 # 🔹 DATA OPSCHONEN
 # -------------------------
 def clean_number(series):
-    return pd.to_numeric(series.astype(str).str.replace(",", "").str.replace(".", ""), errors='coerce')
+    return pd.to_numeric(
+        series.astype(str)
+        .str.replace(".", "", regex=False)
+        .str.replace(",", "", regex=False)
+        .str.replace(" ", "", regex=False),
+        errors='coerce'
+    )
 
-# datums
 if 'date' in social.columns:
     social['date'] = pd.to_datetime(social['date'], errors='coerce')
 
-if 'created_at' in members.columns:
-    members['created_at'] = pd.to_datetime(members['created_at'], errors='coerce')
-
-if 'last_purchase_date' in members.columns:
-    members['last_purchase_date'] = pd.to_datetime(members['last_purchase_date'], errors='coerce')
-
-# cijfers
 if 'views' in social.columns:
     social['views'] = clean_number(social['views'])
 
 if 'followers' in social.columns:
     social['followers'] = clean_number(social['followers'])
 
+if 'last_purchase_date' in members.columns:
+    members['last_purchase_date'] = pd.to_datetime(members['last_purchase_date'], errors='coerce')
+
 # -------------------------
-# 🔥 INSTAGRAM VOLGERS (FIX)
+# 🔥 INSTAGRAM VOLGERS (DEFINITIEVE FIX)
 # -------------------------
 latest = 0
 growth = 0
@@ -90,13 +84,15 @@ if not social.empty and 'followers' in social.columns:
 
     df = social.copy()
 
-    # alleen Instagram
+    # Alleen Instagram
     if 'platform' in df.columns:
-        df = df[df['platform'].str.lower() == 'instagram']
+        df['platform'] = df['platform'].astype(str).str.lower()
+        df = df[df['platform'] == 'instagram']
 
-    # alleen geldige waarden
+    # Geldige rijen
     df = df.dropna(subset=['followers', 'date'])
 
+    # Sorteren
     df = df.sort_values('date')
 
     if not df.empty:
@@ -147,7 +143,7 @@ col3.markdown(f"<div class='kpi'><h3>Members</h3><h2>{members_count}</h2></div>"
 col4.markdown(f"<div class='kpi'><h3>Instagram</h3><h2>{latest}</h2><p>+{growth}</p></div>", unsafe_allow_html=True)
 
 # -------------------------
-# 🔹 MT SAMENVATTING
+# 🔹 SAMENVATTING
 # -------------------------
 st.subheader("📌 Week samenvatting")
 
@@ -164,7 +160,7 @@ else:
 st.write(f"📦 Nog te doen: {totaal_nog} producten")
 
 # -------------------------
-# 🔹 SOCIAL
+# 🔹 SOCIAL TREND
 # -------------------------
 st.subheader("📱 Social")
 
@@ -186,17 +182,15 @@ if not followers_data.empty:
 # -------------------------
 st.subheader("👥 Members")
 
-if not members.empty:
+if not members.empty and 'last_purchase_date' in members.columns:
 
-    if 'last_purchase_date' in members.columns:
+    m = members.dropna(subset=['last_purchase_date'])
+    m = m.groupby(m['last_purchase_date'].dt.date).size().reset_index()
+    m.columns = ['date','new_members']
 
-        m = members.dropna(subset=['last_purchase_date'])
-        m = m.groupby(m['last_purchase_date'].dt.date).size().reset_index()
-        m.columns = ['date','new_members']
-
-        fig = px.line(m, x='date', y='new_members')
-        fig.update_layout(plot_bgcolor='white')
-        st.plotly_chart(fig, use_container_width=True)
+    fig = px.line(m, x='date', y='new_members')
+    fig.update_layout(plot_bgcolor='white')
+    st.plotly_chart(fig, use_container_width=True)
 
 # -------------------------
 # 🔹 PRODUCTEN
