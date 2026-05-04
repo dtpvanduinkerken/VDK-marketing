@@ -1,55 +1,38 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 st.set_page_config(layout="wide")
 
 # -------------------------
-# 🔹 STYLING (MATCH VOORBEELD)
+# 🔹 ENTERPRISE STYLING
 # -------------------------
 st.markdown("""
 <style>
+body {background:#f4f6f9;}
 
-/* ACHTERGROND */
-body {
-    background:#f4f6f9;
-}
-
-/* SIDEBAR */
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #084422 0%, #0b5a2f 100%);
     color:white;
 }
 
-/* KPI CARDS */
 .kpi {
     background:white;
-    padding:20px;
-    border-radius:18px;
-    box-shadow:0 8px 20px rgba(0,0,0,0.05);
-    text-align:left;
+    padding:18px;
+    border-radius:16px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.05);
 }
 
-/* PANELEN */
 .panel {
     background:white;
     padding:20px;
-    border-radius:18px;
-    box-shadow:0 8px 20px rgba(0,0,0,0.05);
+    border-radius:16px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.05);
     margin-bottom:20px;
 }
 
-/* SOCIAL CARD */
-.card {
-    background:white;
-    padding:15px;
-    border-radius:16px;
-    box-shadow:0 5px 15px rgba(0,0,0,0.05);
-}
-
-/* TITELS */
-h1,h2,h3 { color:#084422; }
-
+h1,h2,h3 {color:#084422;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -97,23 +80,16 @@ for col in ['sent','opens','clicks']:
         newsletter[col] = pd.to_numeric(newsletter[col], errors='coerce')
 
 # -------------------------
-# 🔹 MEMBERS GROEI FIX (JUIST)
+# 🔹 MEMBERS GROEI (FIX)
 # -------------------------
 members_growth = pd.DataFrame()
 
-if not members.empty and 'created_at' in members.columns:
+if not members.empty:
     df = members.copy()
-
     df[['year','week']] = df['created_at'].astype(str).str.extract(r'(\d{4}).*?(\d+)')
-
-    df['year'] = pd.to_numeric(df['year'], errors='coerce')
-    df['week'] = pd.to_numeric(df['week'], errors='coerce')
-
-    df = df.dropna(subset=['year','week'])
+    df = df.dropna()
 
     members_growth = df.groupby(['year','week']).size().reset_index(name='new_members')
-
-    members_growth['label'] = members_growth['year'].astype(int).astype(str) + " - week " + members_growth['week'].astype(int).astype(str)
 
     members_growth['sort'] = pd.to_datetime(
         members_growth['year'].astype(str) + members_growth['week'].astype(str) + '1',
@@ -123,99 +99,100 @@ if not members.empty and 'created_at' in members.columns:
     members_growth = members_growth.sort_values('sort')
 
 # -------------------------
-# 🔹 KPI BEREKENING
+# 🔹 KPI DATA
 # -------------------------
 reach = int(social['views'].sum()) if 'views' in social.columns else 0
 members_total = len(members)
-
-open_rate = 0
-if 'sent' in newsletter.columns and newsletter['sent'].sum() > 0:
-    open_rate = (newsletter['opens'].sum() / newsletter['sent'].sum()) * 100
-
 followers = int(social['followers'].max()) if 'followers' in social.columns else 0
 
+open_rate = 0
+if newsletter['sent'].sum() > 0:
+    open_rate = (newsletter['opens'].sum() / newsletter['sent'].sum()) * 100
+
+# trend members
+member_delta = 0
+if len(members_growth) > 1:
+    member_delta = members_growth.iloc[-1]['new_members'] - members_growth.iloc[-2]['new_members']
+
 # -------------------------
-# 🔥 DASHBOARD (HOOFDPAGINA)
+# 🔥 DASHBOARD
 # -------------------------
 if page == "Dashboard":
 
     st.title("📊 Marketing Dashboard")
 
-    # KPI ROW
+    # -------------------------
+    # 🔹 KPI ROW MET TREND
+    # -------------------------
     col1, col2, col3, col4 = st.columns(4)
 
-    col1.markdown(f"<div class='kpi'><h3>Bereik</h3><h2>{reach:,}</h2></div>", unsafe_allow_html=True)
-    col2.markdown(f"<div class='kpi'><h3>Members</h3><h2>{members_total}</h2></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='kpi'><h3>Open rate</h3><h2>{open_rate:.1f}%</h2></div>", unsafe_allow_html=True)
-    col4.markdown(f"<div class='kpi'><h3>Instagram</h3><h2>{followers}</h2></div>", unsafe_allow_html=True)
+    def kpi_card(title, value, delta, data=None):
+        st.markdown("<div class='kpi'>", unsafe_allow_html=True)
+        st.markdown(f"<small>{title}</small>", unsafe_allow_html=True)
+        st.markdown(f"<h2>{value}</h2>", unsafe_allow_html=True)
+
+        if delta is not None:
+            color = "green" if delta >= 0 else "red"
+            st.markdown(f"<span style='color:{color}'>{delta:+}</span>", unsafe_allow_html=True)
+
+        if data is not None and len(data) > 1:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(y=data, mode='lines'))
+            fig.update_layout(height=60, margin=dict(l=0,r=0,t=0,b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col1:
+        kpi_card("Bereik", f"{reach:,}", None)
+
+    with col2:
+        kpi_card("Members", members_total, member_delta, members_growth['new_members'] if not members_growth.empty else None)
+
+    with col3:
+        kpi_card("Open rate", f"{open_rate:.1f}%", None)
+
+    with col4:
+        kpi_card("Instagram", followers, None)
 
     # -------------------------
-    # 🔹 GRAFIEKEN (2 KOLOMMEN)
+    # 🔹 MAIN GRID
     # -------------------------
     col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("<div class='panel'>", unsafe_allow_html=True)
         st.subheader("Members groei")
-
         if not members_growth.empty:
-            fig = px.line(members_growth, x='label', y='new_members', markers=True)
+            fig = px.line(members_growth, x='sort', y='new_members')
             st.plotly_chart(fig, use_container_width=True)
-
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         st.markdown("<div class='panel'>", unsafe_allow_html=True)
         st.subheader("Social bereik")
-
         if not social.empty:
             fig = px.line(social, x='date', y='views')
             st.plotly_chart(fig, use_container_width=True)
-
         st.markdown("</div>", unsafe_allow_html=True)
 
     # -------------------------
-    # 🔹 ONDERSTE BLOKKEN
+    # 🔹 BOTTOM GRID
     # -------------------------
     col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("<div class='panel'>", unsafe_allow_html=True)
         st.subheader("Nieuwsbrief")
-
         if not newsletter.empty:
             st.metric("Verzonden", int(newsletter['sent'].sum()))
             st.metric("Opens", int(newsletter['opens'].sum()))
-
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         st.markdown("<div class='panel'>", unsafe_allow_html=True)
-        st.subheader("Top social post")
-
+        st.subheader("Top post")
         if not social.empty:
             top = social.sort_values("views", ascending=False).head(1)
             st.write(top[['platform','type','views']])
-
         st.markdown("</div>", unsafe_allow_html=True)
-
-# -------------------------
-# 🔹 OVERIGE PAGINA'S (ONGEWIJZIGD)
-# -------------------------
-if page == "Members":
-    st.title("Members")
-    if not members_growth.empty:
-        fig = px.line(members_growth, x='label', y='new_members')
-        st.plotly_chart(fig)
-
-if page == "Nieuwsbrief":
-    st.title("Nieuwsbrief")
-    st.dataframe(newsletter)
-
-if page == "Social":
-    st.title("Social")
-    st.dataframe(social)
-
-if page == "Producten":
-    st.title("Producten")
-    st.dataframe(products)
