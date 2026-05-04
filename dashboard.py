@@ -5,7 +5,7 @@ import plotly.express as px
 st.set_page_config(layout="wide")
 
 # -------------------------
-# 🔹 VDK STYLING
+# 🔹 STYLING
 # -------------------------
 st.markdown("""
 <style>
@@ -53,7 +53,7 @@ members_insights = load("members_insights")
 products = load("product_data")
 
 # -------------------------
-# 🔹 BASIS OPSCHONEN
+# 🔹 OPSCHONEN
 # -------------------------
 if 'date' in social.columns:
     social['date'] = pd.to_datetime(social['date'], errors='coerce')
@@ -106,28 +106,63 @@ if not members.empty and 'created_at' in members.columns:
     members_growth = members_growth.sort_values('sort')
 
 # -------------------------
+# 🔹 TARGETS
+# -------------------------
+TARGET_MEMBERS = 25
+TARGET_OPENRATE = 40
+
+open_rate = 0
+if 'opens' in newsletter.columns and 'sent' in newsletter.columns:
+    if newsletter['sent'].sum() > 0:
+        open_rate = (newsletter['opens'].sum() / newsletter['sent'].sum()) * 100
+
+last_members = members_growth.iloc[-1]['new_members'] if len(members_growth)>0 else 0
+
+# -------------------------
+# 🔹 INSIGHTS
+# -------------------------
+st.subheader("📌 Belangrijkste inzichten")
+
+if last_members >= TARGET_MEMBERS:
+    st.success(f"Members groei boven target (+{int(last_members)})")
+else:
+    st.warning(f"Members groei onder target ({int(last_members)} vs {TARGET_MEMBERS})")
+
+if open_rate >= TARGET_OPENRATE:
+    st.success("Nieuwsbrief presteert sterk")
+else:
+    st.warning("Nieuwsbrief onder benchmark")
+
+if growth > 0:
+    st.success(f"Instagram groeit (+{growth})")
+else:
+    st.warning("Instagram groeit niet")
+
+# -------------------------
 # 🔹 KPI'S
 # -------------------------
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 reach = int(social['views'].sum()) if 'views' in social.columns else 0
-members_last = members_growth.iloc[-1]['new_members'] if len(members_growth)>0 else 0
 
 col1.markdown(f"<div class='kpi'><h3>Bereik</h3><h2>{reach:,}</h2></div>", unsafe_allow_html=True)
-col2.markdown(f"<div class='kpi'><h3>Members</h3><h2>{members_last}</h2></div>", unsafe_allow_html=True)
-col3.markdown(f"<div class='kpi'><h3>Instagram</h3><h2>{latest}</h2><p>+{growth}</p></div>", unsafe_allow_html=True)
+col2.markdown(f"<div class='kpi'><h3>Members</h3><h2>{int(last_members)}</h2><p>Target: {TARGET_MEMBERS}</p></div>", unsafe_allow_html=True)
+col3.markdown(f"<div class='kpi'><h3>Open rate</h3><h2>{open_rate:.1f}%</h2><p>Target: {TARGET_OPENRATE}%</p></div>", unsafe_allow_html=True)
+col4.markdown(f"<div class='kpi'><h3>Instagram</h3><h2>{latest}</h2><p>+{growth}</p></div>", unsafe_allow_html=True)
 
 # -------------------------
-# 🔹 MEMBERS VISUAL
+# 🔹 MEMBERS VISUALS
 # -------------------------
 st.subheader("👥 Members groei")
 
 if not members_growth.empty:
+
     fig = px.line(members_growth, x='label', y='new_members', markers=True)
     st.plotly_chart(fig, use_container_width=True)
 
     members_growth['cumulative'] = members_growth['new_members'].cumsum()
-    fig2 = px.line(members_growth, x='label', y='cumulative', title="Totale groei")
+
+    fig2 = px.line(members_growth, x='label', y='cumulative', title="Totale groei", markers=True)
     st.plotly_chart(fig2, use_container_width=True)
 
 # -------------------------
@@ -142,7 +177,6 @@ if all(col in df.columns for col in ['likes','comments','shares']):
 else:
     df['engagement'] = 0
 
-# filters
 col1, col2 = st.columns(2)
 
 if 'platform' in df.columns:
@@ -155,16 +189,14 @@ if 'type' in df.columns:
     if t != "Alles":
         df = df[df['type'] == t]
 
-df = df.sort_values("views", ascending=False)
-
 # -------------------------
-# 🔥 VISUELE CARDS
+# 🔥 VISUELE SOCIAL CARDS (NIEUW)
 # -------------------------
 st.markdown("### 🔥 Beste posts visueel")
 
 cols = st.columns(3)
 
-for i, (_, row) in enumerate(df.head(6).iterrows()):
+for i, (_, row) in enumerate(df.sort_values("views", ascending=False).head(6).iterrows()):
     with cols[i % 3]:
         st.markdown(f"""
         <div class='card'>
@@ -178,6 +210,14 @@ for i, (_, row) in enumerate(df.head(6).iterrows()):
         """, unsafe_allow_html=True)
 
 # -------------------------
+# 🔹 TOP POSTS (BESTOND AL)
+# -------------------------
+st.markdown("### 🔥 Top posts")
+
+for _, row in df.sort_values("views", ascending=False).head(3).iterrows():
+    st.write(f"{row.get('type','')} - {int(row.get('views',0))} views")
+
+# -------------------------
 # 🔹 CONTENT ADVIES
 # -------------------------
 st.subheader("🧠 Content advies")
@@ -188,7 +228,7 @@ if 'type' in df.columns:
         st.success(f"Focus op {perf.index[0]} content")
 
 # -------------------------
-# 🔹 VOLLEDIGE TABEL
+# 🔹 VOLLEDIGE TABEL (BESTOND AL)
 # -------------------------
 st.subheader("📊 Alle social posts")
 
