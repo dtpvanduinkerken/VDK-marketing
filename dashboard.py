@@ -32,11 +32,10 @@ st.title("📊 Van Duinkerken – Marketing Dashboard")
 SHEET_ID = "188PcnFIPrcazZ5o2JmoBJ52RuUo-acqkhIWRQyntuI0"
 
 # -------------------------
-# 🔹 BETERE LOAD FUNCTIE (GEEN OPEN SHEET MEER)
+# 🔹 LOAD FUNCTIE (STABIEL)
 # -------------------------
 def load(sheet):
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet}"
-    
     try:
         df = pd.read_csv(url)
         st.success(f"{sheet} geladen ({len(df)} rijen)")
@@ -71,20 +70,17 @@ products = safe_date(products, 'date_online')
 # -------------------------
 col1, col2, col3, col4 = st.columns(4)
 
-# Social
 total_reach = social['views'].sum() if 'views' in social.columns else 0
 
-# Nieuwsbrief
 if 'opens' in newsletter.columns and 'sent' in newsletter.columns and newsletter['sent'].sum() > 0:
     open_rate = (newsletter['opens'].sum() / newsletter['sent'].sum()) * 100
 else:
     open_rate = 0
 
-# Members
 new_members = len(members)
 
 # -------------------------
-# 🔹 PRODUCT DATA (BELANGRIJK)
+# 🔹 PRODUCT DATA
 # -------------------------
 if not products.empty and 'brand' in products.columns:
 
@@ -144,16 +140,26 @@ else:
     st.warning("Nieuwsbrief data ontbreekt")
 
 # -------------------------
-# 🔹 MEMBERS
+# 🔹 MEMBERS (FIXED)
 # -------------------------
 st.subheader("👥 Members groei")
 
 if not members.empty and 'created_at' in members.columns:
-    members_per_day = members.groupby(members['created_at'].dt.date).size()
-    fig3 = px.line(x=members_per_day.index, y=members_per_day.values)
+
+    members_per_day = members.groupby(members['created_at'].dt.date).size().reset_index()
+    members_per_day.columns = ['date', 'new_members']
+
+    fig3 = px.line(
+        members_per_day,
+        x='date',
+        y='new_members',
+        title="Nieuwe members per dag"
+    )
+
     st.plotly_chart(fig3, use_container_width=True)
+
 else:
-    st.warning("Members data ontbreekt")
+    st.warning("Members data ontbreekt of kolom 'created_at' klopt niet")
 
 # -------------------------
 # 🔹 PRODUCT VOORTGANG
