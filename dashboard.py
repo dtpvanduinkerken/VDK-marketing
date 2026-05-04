@@ -79,19 +79,51 @@ if 'sent' in newsletter.columns and newsletter['sent'].sum() > 0:
     click_rate = (newsletter['clicks'].sum() / newsletter['sent'].sum()) * 100
 
 # -------------------------
-# 🔹 MEMBERS GROEI
+# 👥 MEMBERS GROEI (FIX)
 # -------------------------
-members_growth = pd.DataFrame()
+st.subheader("👥 Members groei")
 
 if not members.empty and 'created_at' in members.columns:
+
     df = members.copy()
+
+    # 🔹 haal jaar + week uit tekst zoals "2026 - week 1"
     df[['year','week']] = df['created_at'].astype(str).str.extract(r'(\d{4}).*?(\d+)')
-    df = df.dropna()
 
-    members_growth = df.groupby(['year','week']).size().reset_index(name='new_members')
-    members_growth['label'] = members_growth['year'].astype(str) + " - week " + members_growth['week'].astype(str)
+    df['year'] = pd.to_numeric(df['year'], errors='coerce')
+    df['week'] = pd.to_numeric(df['week'], errors='coerce')
 
-last_members = members_growth.iloc[-1]['new_members'] if len(members_growth)>0 else 0
+    # 🔹 NIET alles droppen → alleen waar echt leeg
+    df = df.dropna(subset=['year','week'])
+
+    # 🔹 groepeer
+    weekly = df.groupby(['year','week']).size().reset_index(name='new_members')
+
+    # 🔹 label zoals jij wil
+    weekly['label'] = weekly['year'].astype(int).astype(str) + " - week " + weekly['week'].astype(int).astype(str)
+
+    # 🔹 echte sortering (belangrijk!)
+    weekly['sort'] = pd.to_datetime(
+        weekly['year'].astype(str) + weekly['week'].astype(str) + '1',
+        format='%G%V%u',
+        errors='coerce'
+    )
+
+    weekly = weekly.sort_values('sort')
+
+    # 🔹 grafiek
+    fig = px.line(
+        weekly,
+        x='label',
+        y='new_members',
+        markers=True,
+        title="Nieuwe members per week"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+else:
+    st.warning("Geen members data gevonden")
 
 # -------------------------
 # 🔹 INSTAGRAM
