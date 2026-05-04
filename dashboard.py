@@ -48,7 +48,7 @@ newsletter['date'] = pd.to_datetime(newsletter.get('date'), errors='coerce')
 members['created_at'] = pd.to_datetime(members.get('created_at'), errors='coerce')
 
 # -------------------------
-# 🔹 INSTAGRAM GROEI
+# 🔹 INSTAGRAM
 # -------------------------
 latest = 0
 growth = 0
@@ -63,8 +63,10 @@ if 'followers' in social.columns:
         latest = f.iloc[-1]['followers']
 
 # -------------------------
-# 🔹 KPI BASIS
+# 🔹 KPI’S
 # -------------------------
+col1, col2, col3, col4 = st.columns(4)
+
 reach = social['views'].sum() if 'views' in social.columns else 0
 members_count = len(members)
 
@@ -73,13 +75,19 @@ if 'opens' in newsletter.columns and 'sent' in newsletter.columns and newsletter
     open_rate = (newsletter['opens'].sum() / newsletter['sent'].sum()) * 100
 
 # -------------------------
-# 🔹 PRODUCT DATA
+# 🔹 PRODUCT DATA (FIXED)
 # -------------------------
 grouped = pd.DataFrame()
 totaal_nog = 0
 
 if not products.empty and 'brand' in products.columns:
-    if 'totaal_producten' in products.columns and 'online' in products.columns:
+
+    # FIX: lege online waarden opvullen
+    if 'online' in products.columns:
+        products['online'] = products['online'].fillna(0)
+
+    if 'totaal_producten' in products.columns:
+
         grouped = products.groupby('brand').agg(
             totaal=('totaal_producten','max'),
             online=('online','sum')
@@ -90,51 +98,35 @@ if not products.empty and 'brand' in products.columns:
 
         totaal_nog = grouped['nog_te_doen'].sum()
 
-# -------------------------
-# 🔹 KPI'S
-# -------------------------
-col1, col2, col3, col4 = st.columns(4)
-
+# KPI rendering
 col1.markdown(f"<div class='kpi'><h3>Bereik</h3><h2>{int(reach):,}</h2></div>", unsafe_allow_html=True)
 col2.markdown(f"<div class='kpi'><h3>Open rate</h3><h2>{open_rate:.1f}%</h2></div>", unsafe_allow_html=True)
 col3.markdown(f"<div class='kpi'><h3>Members</h3><h2>{members_count}</h2></div>", unsafe_allow_html=True)
 col4.markdown(f"<div class='kpi'><h3>Instagram</h3><h2>{int(latest)}</h2><p>+{int(growth)}</p></div>", unsafe_allow_html=True)
 
 # -------------------------
-# 🔥 MT SAMENVATTING
+# 🔹 MT SAMENVATTING
 # -------------------------
 st.subheader("📌 Week samenvatting")
 
-insights = []
-alerts = []
-
 if open_rate > 35:
-    insights.append("Nieuwsbrief presteert boven benchmark")
+    st.success("Nieuwsbrief presteert sterk")
 else:
-    alerts.append("Nieuwsbrief performance onder benchmark")
+    st.warning("Nieuwsbrief onder benchmark")
 
-if growth > 0:
-    insights.append(f"Instagram groeit (+{growth})")
-else:
-    alerts.append("Instagram groei stagneert")
-
-if totaal_nog > 0:
-    alerts.append(f"{int(totaal_nog)} producten nog online te zetten")
-
-for i in insights:
-    st.success(i)
-
-for a in alerts:
-    st.warning(a)
+st.write(f"📈 Instagram groei: +{int(growth)}")
+st.write(f"📦 Nog te doen: {int(totaal_nog)} producten")
 
 # -------------------------
-# 🔹 SOCIAL TREND
+# 🔹 SOCIAL
 # -------------------------
 st.subheader("📱 Social trend")
 
 if not social.empty and 'views' in social.columns:
     fig = px.line(social, x='date', y='views')
     st.plotly_chart(fig, use_container_width=True)
+else:
+    st.warning("Geen social data")
 
 # -------------------------
 # 🔹 INSTAGRAM TREND
@@ -142,23 +134,32 @@ if not social.empty and 'views' in social.columns:
 if 'followers' in social.columns:
     f = social.dropna(subset=['followers'])
     if not f.empty:
-        fig = px.line(f, x='date', y='followers', title="Instagram groei")
+        fig = px.line(f, x='date', y='followers')
         st.plotly_chart(fig, use_container_width=True)
 
 # -------------------------
-# 🔹 MEMBERS GROEI
+# 🔹 MEMBERS (FIXED VOOR JOUW DATA)
 # -------------------------
 st.subheader("👥 Members groei")
 
-if not members.empty and 'created_at' in members.columns:
-    m = members.groupby(members['created_at'].dt.date).size().reset_index()
-    m.columns = ['date','new_members']
+if not members.empty:
 
-    fig = px.line(m, x='date', y='new_members')
-    st.plotly_chart(fig, use_container_width=True)
+    # Gebruik last_purchase_date als fallback
+    if 'last_purchase_date' in members.columns:
+        members['last_purchase_date'] = pd.to_datetime(members['last_purchase_date'], errors='coerce')
+
+        m = members.dropna(subset=['last_purchase_date'])
+        m = m.groupby(m['last_purchase_date'].dt.date).size().reset_index()
+        m.columns = ['date','new_members']
+
+        fig = px.line(m, x='date', y='new_members')
+        st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.warning("Members data niet bruikbaar")
 
 # -------------------------
-# 🔹 PRODUCT STURING
+# 🔹 PRODUCT VOORTGANG
 # -------------------------
 st.subheader("📦 Product voortgang")
 
@@ -169,18 +170,21 @@ if not grouped.empty:
     fig = px.bar(grouped, x='brand', y='nog_te_doen')
     st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("### 🔥 Focus merken (meeste werk)")
+    st.markdown("### 🔥 Focus merken")
     st.dataframe(grouped.head(5))
 
-# -------------------------
-# 🔹 SLIMME INSIGHTS
-# -------------------------
-st.subheader("🧠 Slimme inzichten")
+else:
+    st.warning("Geen product data beschikbaar")
 
-if not social.empty and 'views' in social.columns:
-    best_post = social.sort_values("views", ascending=False).iloc[0]
-    st.write(f"Beste content: {best_post['views']} views")
+# -------------------------
+# 🔹 INSIGHTS
+# -------------------------
+st.subheader("🧠 Insights")
 
 if not grouped.empty:
-    risk = grouped.iloc[0]
-    st.write(f"Grootste risico: {risk['brand']} ({int(risk['nog_te_doen'])} producten achter)")
+    top_brand = grouped.iloc[0]
+    st.write(f"Grootste achterstand: {top_brand['brand']} ({int(top_brand['nog_te_doen'])})")
+
+if not social.empty and 'views' in social.columns:
+    top_post = social.sort_values("views", ascending=False).iloc[0]
+    st.write(f"Beste post: {top_post['views']} views")
