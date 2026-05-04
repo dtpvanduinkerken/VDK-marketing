@@ -57,8 +57,11 @@ for col in ['views','likes','comments','shares','saves','followers']:
 if 'last_purchase_date' in members.columns:
     members['last_purchase_date'] = pd.to_datetime(members['last_purchase_date'], errors='coerce')
 
+if 'created_at' in members.columns:
+    members['created_at'] = pd.to_datetime(members['created_at'], errors='coerce')
+
 # -------------------------
-# 🔥 INSTAGRAM VOLGERS (DE JUISTE FIX)
+# 🔥 INSTAGRAM VOLGERS
 # -------------------------
 latest = 0
 growth = 0
@@ -68,18 +71,14 @@ if not social.empty and 'followers' in social.columns:
 
     df = social.copy()
 
-    # Alleen Instagram
     if 'platform' in df.columns:
         df['platform'] = df['platform'].astype(str).str.lower()
         df = df[df['platform'] == 'instagram']
 
-    # Alleen geldige waarden
     df = df.dropna(subset=['followers', 'date'])
-
-    # Sorteren op datum
     df = df.sort_values('date')
 
-    # 🔥 PER DAG LAATSTE WAARDE (BELANGRIJK)
+    # 🔥 PER DAG LAATSTE WAARDE
     df = df.groupby(df['date'].dt.date).tail(1)
 
     if not df.empty:
@@ -164,19 +163,17 @@ if not followers_data.empty:
     st.plotly_chart(fig, use_container_width=True)
 
 # -------------------------
-# 🔹 SOCIAL POSTS OVERZICHT
+# 🔹 SOCIAL OVERZICHT
 # -------------------------
 st.subheader("📱 Social posts overzicht")
 
 df = social.copy()
 
-# engagement
 if all(col in df.columns for col in ['likes','comments','shares']):
     df['engagement'] = df['likes'] + df['comments'] + df['shares']
 else:
     df['engagement'] = 0
 
-# filters
 col1, col2 = st.columns(2)
 
 if 'platform' in df.columns:
@@ -189,7 +186,6 @@ if 'type' in df.columns:
     if type_filter != "Alles":
         df = df[df['type'] == type_filter]
 
-# sort
 sort = st.selectbox("Sorteer op", ["Views", "Engagement", "Datum"])
 
 if sort == "Views":
@@ -199,11 +195,8 @@ elif sort == "Engagement":
 elif sort == "Datum":
     df = df.sort_values("date", ascending=False)
 
-# top posts
 st.markdown("### 🔥 Top posts")
-top_posts = df.head(3)
-
-for _, row in top_posts.iterrows():
+for _, row in df.head(3).iterrows():
     st.write(f"{row.get('platform','')} | {row.get('type','')} | {int(row.get('views',0))} views")
 
 # -------------------------
@@ -218,19 +211,40 @@ if 'type' in df.columns and 'views' in df.columns:
     if not perf.empty:
         advies.append(f"Focus op {perf.index[0]} content")
 
-if 'engagement' in df.columns:
-    if df['engagement'].mean() < 50:
-        advies.append("Engagement laag → gebruik meer call-to-actions")
+if df['engagement'].mean() < 50:
+    advies.append("Engagement laag → gebruik meer call-to-actions")
 
 for a in advies:
     st.success(a)
 
 # -------------------------
-# 🔹 TABEL
+# 🔥 MEMBERS ANALYSE
 # -------------------------
-st.markdown("### 📊 Alle posts")
+st.subheader("👥 Members analyse")
 
-cols = ['date','platform','type','views','likes','comments','shares','engagement']
-cols = [c for c in cols if c in df.columns]
+if not members.empty:
 
-st.dataframe(df[cols], use_container_width=True)
+    m = members.copy()
+
+    if 'last_purchase_date' in m.columns:
+        m['date'] = m['last_purchase_date']
+    elif 'created_at' in m.columns:
+        m['date'] = m['created_at']
+
+    m = m.dropna(subset=['date'])
+
+    m['week'] = m['date'].dt.to_period('W').apply(lambda r: r.start_time)
+
+    weekly = m.groupby('week').size().reset_index(name='new_members')
+
+    fig = px.line(weekly, x='week', y='new_members')
+    st.plotly_chart(fig, use_container_width=True)
+
+    weekly['total'] = weekly['new_members'].cumsum()
+
+    fig2 = px.line(weekly, x='week', y='total')
+    st.plotly_chart(fig2, use_container_width=True)
+
+    if 'total_spent' in m.columns:
+        m['total_spent'] = pd.to_numeric(m['total_spent'], errors='coerce')
+        st.metric("Gemiddelde besteding", f"€ {m['total_spent'].mean():.2f}")
